@@ -52,12 +52,12 @@ function parseFallback(text: string, sender?: string): ParsedActionItem {
     return emptyParsedAction;
   }
 
-  const datePattern = /\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\b|\b(?:today|tomorrow|(?:next\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))(?:\s+(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm))?\b/i;
+  const datePattern = /\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\b|\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+\d{4})?\b|\b(?:today|tomorrow|(?:next\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))(?:\s+(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm))?\b|\bin\s+\d+\s+(?:days?|weeks?)\b/i;
   const timePattern = /\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|\b\d{1,2}:\d{2}\b/i;
   const dateMatch = datePattern.exec(trimmedText);
   const timeMatch = timePattern.exec(trimmedText);
   const hasDateSignal = Boolean(dateMatch) || /\b(next week|next weekend|next month)\b/i.test(trimmedText);
-  const hasTaskSignal = /\b(remind(?:er)?|pick\s?up|drop(?:\s?off)?|call|book|clean|cook|shop|buy|grocery|laundry|doctor|appointment|care|school|practice|schedule|take|send|bring|dentist|meeting|birthday|game|visit|party)\b/i.test(trimmedText);
+  const hasTaskSignal = /\b(remind(?:er)?|pick\s?up|drop(?:\s?off)?|call|book|clean|cook|shop|buy|grocery|laundry|doctor|appointment|care|school|practice|schedule|take|send|bring|dentist|meeting|birthday|game|visit|party|class|lesson|training|concert|recital|soccer|football|basketball|baseball|swim(?:ming)?|field trip|event)\b/i.test(trimmedText);
 
   if (!hasTaskSignal) {
     return emptyParsedAction;
@@ -66,23 +66,30 @@ function parseFallback(text: string, sender?: string): ParsedActionItem {
   const possibleAssignee = /for\s+([A-Za-z][A-Za-z\s'-]+)/i.exec(trimmedText);
   const assignee = possibleAssignee ? possibleAssignee[1].trim() || null : sender ? sender.trim() || null : null;
 
-  const type: "event" | "task" = hasDateSignal && /\b(appointment|dentist|doctor|meeting|birthday|game|visit|party)\b/i.test(trimmedText) ? "event" : "task";
+  const type: "event" | "task" = hasDateSignal && /\b(appointment|dentist|doctor|meeting|birthday|game|visit|party|practice|class|lesson|training|concert|recital|soccer|football|basketball|baseball|swim(?:ming)?|field trip|event)\b/i.test(trimmedText) ? "event" : "task";
   const lowerText = trimmedText.toLowerCase();
   const title = /\bdentist\b/.test(lowerText)
     ? "Dentist Appointment"
+    : /\bdoctor\b/.test(lowerText)
+      ? "Doctor Appointment"
     : /\bappointment\b/.test(lowerText)
       ? "Family Appointment"
       : /\b(pick\s?up|drop(?:\s?off)?)\b/.test(lowerText)
-        ? "Family Pickup"
+        ? /\bschool\b/.test(lowerText) ? "School Pickup" : "Family Pickup"
         : /\b(grocery|shop|buy)\b/.test(lowerText)
           ? "Grocery Shopping"
           : /\b(laundry|clean|cook)\b/.test(lowerText)
             ? "Household Task"
-            : /\b(call|send|bring|take)\b/.test(lowerText)
-              ? "Family Reminder"
-              : type === "event"
-                ? "Family Event"
-                : "Family Task";
+            : /\b(soccer|football|basketball|baseball|swim(?:ming)?)\b/.test(lowerText)
+            ? `${(trimmedText.match(/\b(soccer|football|basketball|baseball|swim(?:ming)?)\b/i)?.[0] ?? "Family").replace(/\b\w/g, (letter) => letter.toUpperCase())} ${/\bpractice\b/i.test(lowerText) ? "Practice" : "Game"}`
+              : /\b(practice|class|lesson|training|concert|recital|field trip|meeting|birthday|party|game|visit)\b/i.test(lowerText)
+                ? (trimmedText.match(/\b(?:[A-Za-z'-]+\s+){0,2}(?:practice|class|lesson|training|concert|recital|field trip|meeting|birthday|party|game|visit)\b/i)?.[0] ?? "Family Event")
+                    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+                : /\b(call|send|bring|take)\b/.test(lowerText)
+                  ? "Family Reminder"
+                  : type === "event"
+                    ? "Family Event"
+                    : "Family Task";
   const dateOrTime = dateMatch
     ? dateMatch[0]
     : timeMatch?.[0] ?? "";
@@ -251,8 +258,6 @@ export async function POST(request: Request) {
       return NextResponse.json(parseFallback(text, sender));
     }
   } catch {
-    return NextResponse.json({
-      ...emptyParsedAction,
-    });
+    return NextResponse.json({ error: "Could not parse the message." }, { status: 500 });
   }
 }

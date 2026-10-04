@@ -68,11 +68,11 @@ function dateForEvent(item: EventTask): string | null {
     }
   }
 
-  const numericDate = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?\b/.exec(value);
+  const numericDate = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2}|\d{4}))?\b/.exec(value);
   if (numericDate) {
     const [, monthText, dayText, yearText] = numericDate;
     const currentYear = new Date().getFullYear();
-    const year = yearText ? Number(yearText) : currentYear;
+    const year = yearText ? Number(yearText.length === 2 ? `20${yearText}` : yearText) : currentYear;
     const month = Number(monthText);
     const day = Number(dayText);
     const parsed = new Date(year, month - 1, day);
@@ -87,6 +87,28 @@ function dateForEvent(item: EventTask): string | null {
     }
   }
 
+  const monthNames = [
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+  ];
+  const monthPattern = /\b(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|october|oct|november|nov|december|dec)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?\b|\b(\d{1,2})(?:st|nd|rd|th)?\s+(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|october|oct|november|nov|december|dec)(?:\s+(\d{4}))?\b/i.exec(value);
+  if (monthPattern) {
+    const monthText = monthPattern[1] ?? monthPattern[5];
+    const day = Number(monthPattern[2] ?? monthPattern[4]);
+    const year = Number(monthPattern[3] ?? monthPattern[6] ?? new Date().getFullYear());
+    const month = monthNames.findIndex((name) => name.startsWith(monthText.toLowerCase().slice(0, 3)));
+    const parsed = new Date(year, month, day);
+
+    if (
+      month >= 0 &&
+      parsed.getFullYear() === year &&
+      parsed.getMonth() === month &&
+      parsed.getDate() === day
+    ) {
+      return toDateKey(parsed);
+    }
+  }
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const lowerValue = value.toLowerCase();
@@ -94,6 +116,12 @@ function dateForEvent(item: EventTask): string | null {
   if (/\btoday\b/.test(lowerValue)) return toDateKey(today);
   if (/\btomorrow\b/.test(lowerValue)) {
     today.setDate(today.getDate() + 1);
+    return toDateKey(today);
+  }
+
+  const relativeDate = /\bin\s+(\d+)\s+(day|week)s?\b/.exec(lowerValue);
+  if (relativeDate) {
+    today.setDate(today.getDate() + Number(relativeDate[1]) * (relativeDate[2] === "week" ? 7 : 1));
     return toDateKey(today);
   }
 
@@ -391,6 +419,10 @@ export default function Home() {
           sender: userName,
         }),
       });
+
+      if (!response.ok) {
+        throw new Error(`Message parsing failed (${response.status})`);
+      }
 
       const parsed: ParsedResult = await response.json();
 
